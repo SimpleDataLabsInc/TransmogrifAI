@@ -35,12 +35,11 @@ import java.net.URI
 import com.salesforce.op.utils.spark.RichRDD._
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericRecord
-import org.apache.avro.mapred.AvroKey
-import org.apache.avro.mapreduce.{AvroJob, AvroKeyInputFormat, AvroKeyOutputFormat}
+import org.apache.avro.mapred._
 import org.apache.avro.specific.SpecificData
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.NullWritable
-import org.apache.hadoop.mapreduce.Job
+import org.apache.hadoop.mapred.JobConf
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 
@@ -134,11 +133,10 @@ object AvroInOut {
     (implicit sc: SparkSession, ct: ClassTag[T]): RDD[T] = {
     def maybeCopy(r: T): T = if (deepCopy) SpecificData.get().deepCopy(r.getSchema, r) else r
 
-    val records = sc.sparkContext.newAPIHadoopFile(path,
-      classOf[AvroKeyInputFormat[T]],
-      classOf[AvroKey[T]],
-      classOf[NullWritable],
-      sc.sparkContext.hadoopConfiguration
+    val records = sc.sparkContext.hadoopFile(path,
+      classOf[AvroInputFormat[T]],
+      classOf[AvroWrapper[T]],
+      classOf[NullWritable]
     )
 
     val results =
@@ -155,14 +153,27 @@ object AvroInOut {
 
   implicit class AvroWriter[T <: GenericRecord](rdd: RDD[T]) {
 
-    private def writeAvro(path: String)(implicit job: Job): Unit = {
+    private def createJobConfFromContext(schema: String)(implicit sc: SparkSession) = {
+      val jobConf = new JobConf(sc.sparkContext.hadoopConfiguration)
+      AvroJob.setOutputSchema(jobConf, new Schema.Parser().parse(schema))
+      jobConf
+    }
+
+    /**
+     * This method writes out RDDs of generic records as avro files to path.
+     *
+     * @param path Input directory where avro records should be written.
+     * @param jobConf job config
+     * @return
+     */
+    def writeAvro(path: String)(implicit jobConf: JobConf): Unit = {
       val avroData = rdd.map(ar => (new AvroKey(ar), NullWritable.get))
-      avroData.saveAsNewAPIHadoopFile(
+      avroData.saveAsHadoopFile(
         path,
-        classOf[AvroKey[T]],
+        classOf[AvroWrapper[GenericRecord]],
         classOf[NullWritable],
-        classOf[AvroKeyOutputFormat[T]],
-        job.getConfiguration
+        classOf[AvroOutputFormat[GenericRecord]],
+        jobConf
       )
     }
 
@@ -171,12 +182,12 @@ object AvroInOut {
      *
      * @param path   Input directory where avro records should be written.
      * @param schema Avro schema string for records being written out.
+     * @param sc     Spark Session
      * @return
      */
-    def writeAvro(path: String, schema: String)
-      (implicit job: Job = Job.getInstance(rdd.sparkContext.hadoopConfiguration)): Unit = {
-      AvroJob.setOutputKeySchema(job, new Schema.Parser().parse(schema))
-      writeAvro(path)(job)
+    def writeAvro(path: String, schema: String)(implicit sc: SparkSession): Unit = {
+      val jobConf = createJobConfFromContext(schema)
+      writeAvro(path)(jobConf)
     }
 
   }

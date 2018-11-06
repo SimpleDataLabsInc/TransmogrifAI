@@ -149,7 +149,7 @@ class SmartTextMapVectorizer[T <: OPMap[String]]
   }
 
   def fitFn(dataset: Dataset[Seq[T#Value]]): SequenceModel[T, OPVector] = {
-    require(!dataset.isEmpty, "Input dataset cannot be empty")
+    assert(!dataset.isEmpty, "Input dataset cannot be empty")
 
     val maxCard = $(maxCardinality)
     val shouldCleanKeys = $(cleanKeys)
@@ -264,8 +264,7 @@ final class SmartTextMapVectorizerModel[T <: OPMap[String]] private[op]
     val textVector = hash(rowTextTokenized, keysText, args.hashingParams)
     val textNullIndicatorsVector =
       if (args.shouldTrackNulls) Seq(getNullIndicatorsVector(keysText, rowTextTokenized)) else Nil
-
-    categoricalVector.combine(textVector, textNullIndicatorsVector: _*)
+    VectorsCombiner.combineOP(Seq(categoricalVector, textVector) ++ textNullIndicatorsVector)
   }
 
   private def getNullIndicatorsVector(keysSeq: Seq[Seq[String]], inputs: Seq[Map[String, TextList]]): OPVector = {

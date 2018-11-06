@@ -44,8 +44,6 @@ class OpRandomForestClassifierTest extends
   OpEstimatorSpec[Prediction, OpPredictorWrapperModel[RandomForestClassificationModel],
     OpPredictorWrapper[RandomForestClassifier, RandomForestClassificationModel]] with PredictionEquality {
 
-  override def specName: String = Spec[OpRandomForestClassifier]
-
   lazy val (inputData, rawLabelMulti, featuresMulti) =
     TestFeatureBuilder[RealNN, OPVector]("labelMulti", "featuresMulti",
       Seq(

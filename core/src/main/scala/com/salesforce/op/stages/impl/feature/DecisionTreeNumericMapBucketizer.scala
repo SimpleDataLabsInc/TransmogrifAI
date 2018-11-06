@@ -36,7 +36,6 @@ import com.salesforce.op.stages.AllowLabelAsInput
 import com.salesforce.op.stages.base.binary.{BinaryEstimator, BinaryModel}
 import com.salesforce.op.utils.spark.OpVectorColumnMetadata
 import com.salesforce.op.utils.spark.RichDataset._
-import com.salesforce.op.utils.spark.RichVector._
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.types.Metadata
 
@@ -164,7 +163,7 @@ final class DecisionTreeNumericMapBucketizerModel[I2 <: OPMap[_]] private[op]
           input = cleanedInputMap.get(k)
         )
       }
-    combine(vectors).toOPVector
+    VectorsCombiner.combine(vectors).toOPVector
   }
 
 }

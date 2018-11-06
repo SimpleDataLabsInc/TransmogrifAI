@@ -1,3 +1,5 @@
+apply plugin: 'com.github.johnrengelman.shadow'
+
 dependencies {
     // scopt
     compile "com.github.scopt:scopt_$scalaVersion:$scoptVersion"
@@ -23,6 +25,13 @@ ext {
     templateResourcesDir = "$project.buildDir/template-resources"
 }
 
+shadowJar {
+    zip64 = true
+    exclude 'META-INF/maven/**'
+    baseName = jar.baseName
+}
+shadowJar.dependsOn(createVersionProperties)
+
 task copySpark(type: Copy) {
     from '../templates/simple/gradle'
     into "$templateResourcesDir/templates/simple/gradle"
@@ -33,11 +42,13 @@ task copySpark(type: Copy) {
 }
 
 task copyTools(type: Copy) {
+
     from '../templates/simple'
     into "$templateResourcesDir/templates/simple"
     include "**/gradlew"
     include "**/spark.gradle"
     exclude "**/*.gradle.template"
+
 }
 
 task copyLocalTemplates(type: Copy) {
@@ -47,6 +58,7 @@ task copyLocalTemplates(type: Copy) {
 }
 
 task copyTemplates(type: Copy) {
+
     from '../templates'
     into "$templateResourcesDir/templates"
     exclude '**/*.jar'

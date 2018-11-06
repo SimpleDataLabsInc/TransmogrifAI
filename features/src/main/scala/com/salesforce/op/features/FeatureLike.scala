@@ -73,6 +73,11 @@ trait FeatureLike[O <: FeatureType] {
   val parents: Seq[OPFeature]
 
   /**
+   * The distribution information of the feature (is a sequence because map features have distribution for each key)
+   */
+  val distributions: Seq[FeatureDistributionLike]
+
+  /**
    * Weak type tag of the feature type O
    */
   implicit val wtt: WeakTypeTag[O]
@@ -81,26 +86,6 @@ trait FeatureLike[O <: FeatureType] {
    * A handy logger instance
    */
   @transient protected lazy val log = LoggerFactory.getLogger(this.getClass)
-
-  /**
-   * The distribution information of the feature
-   * (is a sequence because map features have distribution for each key)
-   */
-  val distributions: Seq[FeatureDistributionLike]
-
-  /**
-   * The distribution information of the feature computed during training
-   * (is a sequence because map features have distribution for each key)
-   */
-  final def trainingDistributions: Seq[FeatureDistributionLike] =
-    distributions.filter(_.`type` == FeatureDistributionType.Training)
-
-  /**
-   * The distribution information of the feature computed during scoring
-   * (is a sequence because map features have distribution for each key)
-   */
-  final def scoringDistributions: Seq[FeatureDistributionLike] =
-    distributions.filter(_.`type` == FeatureDistributionType.Scoring)
 
   /**
    * Check whether this feature's type [[O]] is a subtype of the given feature type [[T]]
@@ -154,7 +139,7 @@ trait FeatureLike[O <: FeatureType] {
    * and input parameters may not be commutative
    */
   final def sameOrigin(in: Any): Boolean = in match {
-    case f: FeatureLike[O] =>
+    case f: FeatureLike[O] => {
       isResponse == f.isResponse &&
         wtt.tpe =:= f.wtt.tpe && {
         originStage -> f.originStage match {
@@ -164,6 +149,7 @@ trait FeatureLike[O <: FeatureType] {
           case (os, fos) => os.uid == fos.uid
         }
       }
+    }
     case _ => false
   }
 
@@ -175,16 +161,11 @@ trait FeatureLike[O <: FeatureType] {
   final override def hashCode: Int = uid.hashCode
 
   final override def toString: String = {
-    val valStr = Seq(
-      "name" -> name,
-      "uid" -> uid,
-      "isResponse" -> isResponse,
-      "originStage" -> Option(originStage).map(_.uid).orNull,
-      "parents" -> parents.map(_.uid).mkString("[", ",", "]"),
-      "distributions" -> distributions.map(_.toString).mkString("[", ",", "]")
-    ).map { case (n, v) => s"$n = $v" }.mkString(", ")
-
-    s"${getClass.getSimpleName}($valStr)"
+    val oid = Option(originStage).map(_.uid).orNull
+    val pids = parents.map(_.uid).mkString("[", ",", "]")
+    s"${this.getClass.getSimpleName}(" +
+      s"name = $name, uid = $uid, isResponse = $isResponse, originStage = $oid, parents = $pids," +
+      s" distributions = ${distributions})"
   }
 
   /**
@@ -372,7 +353,7 @@ trait FeatureLike[O <: FeatureType] {
         if (acc.contains(f.uid)) acc else acc + (f.uid -> f)
       )
 
-    require(checkFeatureOriginStageMatch(featuresByUid.values), "Some of your features had parent features that did" +
+    assert(checkFeatureOriginStageMatch(featuresByUid.values), "Some of your features had parent features that did" +
       " not match the inputs to their origin stage. All stages must be a new instance when used to transform features")
 
     def logDebug(msg: String) = log.debug(s"[${this.uid}]: $msg")

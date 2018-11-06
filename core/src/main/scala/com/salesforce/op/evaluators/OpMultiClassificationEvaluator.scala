@@ -34,7 +34,6 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import com.salesforce.op.UID
 import com.twitter.algebird.Monoid._
 import com.twitter.algebird.Operators._
-import com.twitter.algebird.Tuple2Semigroup
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.{DoubleArrayParam, IntArrayParam}
@@ -227,8 +226,8 @@ private[op] class OpMultiClassificationEvaluator
         .map(_ -> (new Array[Long](nThresholds), new Array[Long](nThresholds)))
         .toMap[Label, CorrIncorr]
 
-    implicit val sgTuple2 = new Tuple2Semigroup[Array[Long], Array[Long]]()
-    val agg: MetricsMap = data.treeAggregate[MetricsMap](zeroValue)(combOp = _ + _, seqOp = _ + computeMetrics(_))
+    val agg: MetricsMap =
+      data.treeAggregate[MetricsMap](zeroValue)(combOp = _ + _, seqOp = _ + computeMetrics(_))
 
     val nRows = data.count()
     ThresholdMetrics(

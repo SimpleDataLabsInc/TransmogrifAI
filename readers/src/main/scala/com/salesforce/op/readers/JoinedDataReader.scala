@@ -128,7 +128,7 @@ private[op] abstract class JoinedReader[T, U]
 
   final def subReaders: Seq[DataReader[_]] = {
     val allReaders = Seq(leftReader.subReaders, rightReader.subReaders).flatten
-    require(allReaders.size == allReaders.distinct.size, "Cannot have duplicate readers in joins")
+    assert(allReaders.size == allReaders.distinct.size, "Cannot have duplicate readers in joins")
     allReaders
   }
 

@@ -36,7 +36,6 @@ import com.salesforce.op.features.types._
 import com.salesforce.op.stages.OpPipelineStageBase
 import com.salesforce.op.stages.base.sequence.SequenceTransformer
 import com.salesforce.op.utils.spark.{OpVectorColumnMetadata, OpVectorMetadata}
-import com.salesforce.op.utils.spark.RichVector._
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector}
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.feature.HashingTF
@@ -266,7 +265,7 @@ private[op] trait HashingFun {
           fNameHashesWithInputs.map { case (featureNameHash, el) =>
             hasher.transform(prepare[T](el, params.hashWithIndex, params.prependFeatureName, featureNameHash)).asML
           }
-        combine(hashedVecs).toOPVector
+        VectorsCombiner.combine(hashedVecs).toOPVector
       }
     }
   }
@@ -380,7 +379,7 @@ private[op] trait MapHashingFun extends HashingFun {
               prepare[TextList](el, params.hashWithIndex, params.prependFeatureName, featureNameHash)
             ).asML
           })
-        combine(hashedVecs.flatten).toOPVector
+        VectorsCombiner.combine(hashedVecs.flatten).toOPVector
       }
     }
   }

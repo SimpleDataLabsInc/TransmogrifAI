@@ -271,7 +271,7 @@ case class Correlations
   nanCorrs: Seq[String],
   corrType: CorrelationType
 ) extends MetadataLike {
-  require(featuresIn.length == values.length, "Feature names and correlation values arrays must have the same length")
+  assert(featuresIn.length == values.length, "Feature names and correlation values arrays must have the same length")
 
   def this(corrs: Seq[(String, Double)], nans: Seq[String], corrType: CorrelationType) = this(
     featuresIn = corrs.map(_._1),

@@ -62,10 +62,10 @@ trait OpCli {
   }
 }
 
-object CommandParser extends scopt.OptionParser[CliParameters]("transmogrifai") with OpCli {
+object CommandParser extends scopt.OptionParser[CliParameters]("op") with OpCli {
   private[cli] var AUTO_ENABLED = true // for testing, temporary
 
-  head("transmogrifai: TransmogrifAI CLI")
+  head("op: TransmogrifAI CLI")
 
   help("help")
 

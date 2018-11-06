@@ -48,22 +48,26 @@ import org.scalatest.junit.JUnitRunner
 import org.slf4j.LoggerFactory
 
 import scala.collection.JavaConverters._
-import scala.concurrent.{Future, Promise}
+import scala.concurrent.Promise
 import scala.reflect.ClassTag
 
 
 @RunWith(classOf[JUnitRunner])
-class OpWorkflowRunnerTest extends AsyncFlatSpec with PassengerSparkFixtureTest with TestSparkStreamingContext {
+class OpWorkflowRunnerTest extends AsyncFlatSpec
+  with PassengerSparkFixtureTest with TestSparkStreamingContext {
 
   val log = LoggerFactory.getLogger(this.getClass)
 
-  lazy val testDir = Paths.get(tempDir.toString, "op-runner-test").toFile.getAbsoluteFile
-  lazy val modelLocation = Paths.get(testDir.toString, "model").toFile.getAbsoluteFile
+  val thisDir = Paths.get("resources", "tmp", "OpWorkflowRunnerTest").toFile.getCanonicalFile
+
+  override def beforeAll: Unit = try deleteRecursively(thisDir) finally super.beforeAll
+  override def afterAll: Unit = try deleteRecursively(thisDir) finally super.afterAll
 
   private val features = Seq(height, weight, gender, description, age).transmogrify()
   private val survivedNum = survived.occurs()
 
-  val pred = new OpLogisticRegression().setRegParam(0).setInput(survivedNum, features).getOutput()
+  val pred = new OpLogisticRegression().setRegParam(0)
+    .setInput(survivedNum, features).getOutput()
   private val workflow = new OpWorkflow().setResultFeatures(pred, survivedNum).setReader(dataReader)
   private val evaluator = Evaluators.BinaryClassification().setLabelCol(survivedNum).setPredictionCol(pred)
 
@@ -82,8 +86,7 @@ class OpWorkflowRunnerTest extends AsyncFlatSpec with PassengerSparkFixtureTest 
 
   val invalidParamsLocation = Some(resourceFile(name = "RunnerParamsInvalid.json").getPath)
   val paramsLocation = Some(resourceFile(name = "RunnerParams.json").getPath)
-  def testConfig: OpWorkflowRunnerConfig = OpWorkflowRunnerConfig(paramLocation = paramsLocation)
-    .copy(modelLocation = Some(modelLocation.toString))
+  val testConfig = OpWorkflowRunnerConfig(paramLocation = paramsLocation)
 
   Spec[OpWorkflowRunner] should "correctly determine if the command line options are valid for each run type" in {
     assertConf(OpWorkflowRunnerConfig(Train, modelLocation = Some("Test")))
@@ -124,10 +127,12 @@ class OpWorkflowRunnerTest extends AsyncFlatSpec with PassengerSparkFixtureTest 
   }
 
   it should "train a workflow and write the trained model" in {
-    val modelMetricsLocation = Paths.get(testDir.toString, "train-metrics").toFile.getCanonicalFile
+    lazy val modelLocation = new File(thisDir, "op-runner-test-model")
+    lazy val modelMetricsLocation = Paths.get(thisDir.toString, "op-runner-test-metrics", "train").toFile
 
     val runConfig = testConfig.copy(
       runType = Train,
+      modelLocation = Some(modelLocation.toString),
       metricsLocation = Some(modelMetricsLocation.toString)
     )
     val res = doRun[TrainResult](runConfig, modelLocation, modelMetricsLocation)
@@ -135,8 +140,8 @@ class OpWorkflowRunnerTest extends AsyncFlatSpec with PassengerSparkFixtureTest 
   }
 
   it should "score a dataset with a trained model" in {
-    val scoresLocation = Paths.get(testDir.toString, "score").toFile.getCanonicalFile
-    val scoringMetricsLocation = Paths.get(testDir.toString, "score-metrics").toFile.getCanonicalFile
+    val scoresLocation = Paths.get(thisDir.toString, "op-runner-test-write", "score").toFile
+    val scoringMetricsLocation = Paths.get(thisDir.toString, "op-runner-test-metrics", "score").toFile
 
     val runConfig = testConfig.copy(
       runType = Score,
@@ -151,8 +156,8 @@ class OpWorkflowRunnerTest extends AsyncFlatSpec with PassengerSparkFixtureTest 
   }
 
   it should "streaming score a dataset with a trained model" in {
-    val readLocation = Paths.get(testDir.toString, "streaming-score-in").toFile.getCanonicalFile
-    val scoresLocation = Paths.get(testDir.toString, "streaming-score-out").toFile.getCanonicalFile
+    val readLocation = Paths.get(thisDir.toString, "op-runner-test-read", "streaming-score").toFile
+    val scoresLocation = Paths.get(thisDir.toString, "op-runner-test-write", "streaming-score").toFile
 
     // Prepare streaming input data
     FileUtils.forceMkdir(readLocation)
@@ -174,20 +179,18 @@ class OpWorkflowRunnerTest extends AsyncFlatSpec with PassengerSparkFixtureTest 
   }
 
   it should "evaluate a dataset with a trained model" in {
-    val scoresLocation = Paths.get(testDir.toString, "eval-score").toFile.getCanonicalFile
-    val metricsLocation = Paths.get(testDir.toString, "eval-metrics").toFile.getCanonicalFile
+    val metricsLocation = Paths.get(thisDir.toString, "op-runner-test-metrics", "eval").toFile
 
     val runConfig = testConfig.copy(
       runType = Evaluate,
-      writeLocation = Some(scoresLocation.toString),
       metricsLocation = Some(metricsLocation.toString)
     )
-    val res = doRun[EvaluateResult](runConfig, metricsLocation, scoresLocation)
+    val res = doRun[EvaluateResult](runConfig, metricsLocation)
     res.metrics shouldBe a[BinaryClassificationMetrics]
   }
 
   it should "compute features upto with a workflow" in {
-    lazy val featuresLocation = Paths.get(testDir.toString, "features").toFile.getCanonicalFile
+    lazy val featuresLocation = Paths.get(thisDir.toString, "op-runner-test-write", "features").toFile
 
     val runConfig = testConfig.copy(
       runType = Features,
@@ -198,10 +201,8 @@ class OpWorkflowRunnerTest extends AsyncFlatSpec with PassengerSparkFixtureTest 
   }
 
   it should "collect and report metrics on application end" in {
-    for {
-      _ <- Future(spark.stop()) // stop spark to make sure metrics promise completes
-      metrics <- metricsPromise.future
-    } yield {
+    spark.stop()
+    metricsPromise.future.map { metrics =>
       metrics.appId.isEmpty shouldBe false
       OpWorkflowRunType.withNameInsensitiveOption(metrics.runType).isDefined shouldBe true
       metrics.appName shouldBe "op-test"

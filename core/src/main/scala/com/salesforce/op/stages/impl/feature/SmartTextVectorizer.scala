@@ -77,7 +77,7 @@ class SmartTextVectorizer[T <: Text](uid: String = UID[SmartTextVectorizer[T]])(
   )
 
   def fitFn(dataset: Dataset[Seq[T#Value]]): SequenceModel[T, OPVector] = {
-    require(!dataset.isEmpty, "Input dataset cannot be empty")
+    assert(!dataset.isEmpty, "Input dataset cannot be empty")
 
     val maxCard = $(maxCardinality)
     val shouldCleanText = $(cleanText)
@@ -123,7 +123,7 @@ class SmartTextVectorizer[T <: Text](uid: String = UID[SmartTextVectorizer[T]])(
   }
 
   private def makeVectorMetadata(smartTextParams: SmartTextVectorizerModelArgs): OpVectorMetadata = {
-    require(inN.length == smartTextParams.isCategorical.length)
+    assert(inN.length == smartTextParams.isCategorical.length)
 
     val (categoricalFeatures, textFeatures) =
       SmartTextVectorizer.partition[TransientFeature](inN, smartTextParams.isCategorical)
@@ -216,7 +216,7 @@ final class SmartTextVectorizerModel[T <: Text] private[op]
       val textVector: OPVector = hash[TextList](textTokens, getTextTransientFeatures, args.hashingParams)
       val textNullIndicatorsVector = if (args.shouldTrackNulls) Seq(getNullIndicatorsVector(textTokens)) else Seq.empty
 
-      categoricalVector.combine(textVector, textNullIndicatorsVector: _*)
+      VectorsCombiner.combineOP(Seq(categoricalVector, textVector) ++ textNullIndicatorsVector)
     }
   }
 

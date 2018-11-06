@@ -195,8 +195,8 @@ class OpLogisticRegression(uid: String = UID[OpLogisticRegression])
 class OpLogisticRegressionModel
 (
   sparkModel: LogisticRegressionModel,
-  uid: String = UID[OpLogisticRegressionModel],
-  operationName: String = classOf[LogisticRegression].getSimpleName
+  operationName: String = classOf[LogisticRegression].getSimpleName,
+  uid: String = UID[OpLogisticRegressionModel]
 )(
   implicit tti1: TypeTag[RealNN],
   tti2: TypeTag[OPVector],
@@ -210,3 +210,4 @@ class OpLogisticRegressionModel
   @transient lazy val probability2predictionMirror =
     reflectMethod(getSparkMlStage().get, "probability2prediction")
 }
+
