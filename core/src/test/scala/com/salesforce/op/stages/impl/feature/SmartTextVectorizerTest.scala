@@ -91,7 +91,7 @@ class SmartTextVectorizerTest
     val textRes = transformed.collect(textVectorized)
     assertNominal(fieldText, Array.fill(textRes.head.value.size)(false), textRes)
     val (smart, expected) = result.map { case (smartVector, categoricalVector, textVector, nullVector) =>
-      val combined = VectorsCombiner.combineOP(Seq(categoricalVector, textVector, nullVector))
+      val combined = categoricalVector.combine(textVector, nullVector)
       smartVector -> combined
     }.unzip
 
@@ -139,7 +139,7 @@ class SmartTextVectorizerTest
     val textRes = transformed.collect(textVectorized)
     assertNominal(fieldText, Array.fill(textRes.head.value.size)(false), textRes)
     val (smart, expected) = result.map { case (smartVector, textVector, nullVector) =>
-      val combined = VectorsCombiner.combineOP(Seq(textVector, nullVector))
+      val combined = textVector.combine(nullVector)
       smartVector -> combined
     }.unzip
 
@@ -170,17 +170,17 @@ class SmartTextVectorizerTest
     regular shouldBe shortcut
   }
 
-  it should "fail with an assertion error" in {
+  it should "fail with an error" in {
     val emptyDF = inputData.filter(inputData("text1") === "").toDF()
 
     val smartVectorized = new SmartTextVectorizer()
       .setMaxCardinality(2).setNumFeatures(4).setMinSupport(1).setTopK(2).setPrependFeatureName(false)
       .setInput(f1, f2).getOutput()
 
-    val thrown = intercept[AssertionError] {
+    val thrown = intercept[IllegalArgumentException] {
       new OpWorkflow().setResultFeatures(smartVectorized).transform(emptyDF)
     }
-    assert(thrown.getMessage.contains("assertion failed"))
+    assert(thrown.getMessage.contains("requirement failed"))
   }
 
   it should "generate metadata correctly" in {
