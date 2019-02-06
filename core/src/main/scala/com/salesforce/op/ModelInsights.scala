@@ -41,7 +41,7 @@ import com.salesforce.op.stages.impl.selector._
 import com.salesforce.op.stages.impl.tuning.{DataBalancerSummary, DataCutterSummary, DataSplitterSummary}
 import com.salesforce.op.stages.sparkwrappers.generic.SparkWrapperParams
 import com.salesforce.op.stages.sparkwrappers.specific.OpPredictorWrapperModel
-import com.salesforce.op.utils.json.{EnumEntrySerializer, SpecialDoubleSerializer}
+import com.salesforce.op.utils.json.{EnumEntrySerializer, JsonUtils, SpecialDoubleSerializer}
 import com.salesforce.op.utils.spark.RichMetadata._
 import com.salesforce.op.utils.spark.{OpVectorColumnMetadata, OpVectorMetadata}
 import com.salesforce.op.utils.table.Alignment._
@@ -106,6 +106,33 @@ case class ModelInsights
     res ++= topKContributions(topK)
     res ++= topKCramersV(topK)
     res.mkString("\n")
+  }
+
+  def jsonPrettyPrint(topK: Int = 10) : String = {
+    var theMaps : List[Map[String, Seq[Map[String, String]]]] = Nil
+    theMaps = mapPrettySelectedModelInfo :: theMaps
+    theMaps = mapModelEvaluationMetrics :: theMaps
+    theMaps = mapTopKCorrelations(topK) ::: theMaps
+    theMaps = mapTopKCramersV(topK) :: theMaps
+    theMaps = mapTopKContributions(topK) :: theMaps
+    val finalMap = Seq("Insights" -> theMaps).toMap
+    JsonUtils.toJsonString(finalMap, true)
+  }
+
+  private def tableSelectedModelInfo: Table = {
+    val name = selectedModelInfo.map( sm => s"Selected Model - ${sm.bestModelType} ${sm.bestModelName}" ).getOrElse("")
+    val validationResults: Seq[(String, Any)] = selectedModelInfo.map( y =>
+      y.validationResults
+        .filter(x => x.modelName == y.bestModelName)
+        .flatMap(e => Seq("name" -> e.modelName, "uid" -> e.modelUID, "modelType" -> e.modelType) ++
+          e.modelParameters.toSeq)
+    ).getOrElse(Seq.empty)
+    val table = Table(name = name, columns = Seq("Model Param", "Value"), rows = validationResults)
+    table
+  }
+
+  private def mapPrettySelectedModelInfo: Map[String, Seq[Map[String, String]]] = {
+    tableSelectedModelInfo.asMap
   }
 
   private def validatedModelTypes = selectedModelInfo.map(_.validationResults.map(_.modelType).toList.distinct)
@@ -202,6 +229,34 @@ case class ModelInsights
     }
   }
 
+  private def tableModelEvaluationMetrics: Table = {
+    val name = "Model Evaluation Metrics"
+    val niceMetricsNames = (BinaryClassEvalMetrics.values ++ MultiClassEvalMetrics.values ++
+      RegressionEvalMetrics.values ++ OpEvaluatorNames.values)
+      .map(m => m.entryName -> m.humanFriendlyName).toMap
+    def niceName(nm: String): String = nm.split("_").lastOption.flatMap(n => niceMetricsNames.get(n)).getOrElse(nm)
+    val trainEvalMetrics = selectedModelInfo.map(_.trainEvaluation)
+    val testEvalMetrics = selectedModelInfo.flatMap(_.holdoutEvaluation)
+    val (metricNameCol, holdOutCol, trainingCol) = ("Metric Name", "Hold Out Set Value", "Training Set Value")
+    (trainEvalMetrics, testEvalMetrics) match {
+      case (Some(trainMetrics), Some(testMetrics)) =>
+        val trainMetricsMap = trainMetrics.toMap.collect { case (k, v: Double) => k -> v.toString }.toSeq.sortBy(_._1)
+        val testMetricsMap = testMetrics.toMap
+        val rows = trainMetricsMap
+          .map { case (k, v) => (niceName(k), v, testMetricsMap(k).toString) }
+        Table(name = name, columns = Seq(metricNameCol, trainingCol, holdOutCol), rows = rows)
+      case (Some(trainMetrics), None) =>
+        val trainMetricsMap = trainMetrics.toMap.collect { case (k, v: Double) =>
+          niceName(k) -> v.toString }.toSeq.sortBy(_._1)
+        Table(name = name, columns = Seq(metricNameCol, trainingCol), rows = trainMetricsMap)
+      case (None, _) => Table(name = "No metrics found", columns = Nil, rows = Nil)
+    }
+  }
+
+  private def mapModelEvaluationMetrics: Map[String, Seq[Map[String, String]]] = {
+    tableModelEvaluationMetrics.asMap
+  }
+
   private def topKInsights(s: Seq[(FeatureInsights, Insights, Double)], topK: Int): Seq[(String, Double)] = {
     s.foldLeft(Seq.empty[(String, Double)]) {
       case (acc, (feature, derived, corr)) =>
@@ -215,6 +270,33 @@ case class ModelInsights
         }
         if (acc.exists(_._1 == insightValue)) acc else acc :+ (insightValue, corr)
     } take topK
+  }
+
+  private def mapTopKCorrelations(topK: Int): List[Map[String, Seq[Map[String, String]]]] = {
+    val corrs = for {
+      (feature, derived) <- derivedNonExcludedFeatures
+    } yield (feature, derived, derived.corr.collect { case v if !v.isNaN => v })
+
+    val corrDsc = corrs.map { case (f, d, corr) => (f, d, corr.getOrElse(Double.MinValue)) }.sortBy(_._3).reverse
+    val corrAsc = corrs.map { case (f, d, corr) => (f, d, corr.getOrElse(Double.MaxValue)) }.sortBy(_._3)
+    val topPositiveCorrs = topKInsights(corrDsc, topK)
+    val topNegativeCorrs = topKInsights(corrAsc, topK).filterNot(topPositiveCorrs.contains)
+
+    val correlationCol = "Correlation Value"
+
+    lazy val topPositive = Table(
+      name = "Top Model Insights - Positive",
+      columns = Seq("Top Positive Correlations", correlationCol),
+      rows = topPositiveCorrs
+    ).asMap
+
+    lazy val topNegative = Table(
+      name = "Top Model Insights - Negative",
+      columns = Seq("Top Negative Correlations", correlationCol),
+      rows = topNegativeCorrs
+    ).asMap
+
+    if (topNegativeCorrs.isEmpty) List(topPositive) else List(topPositive, topNegative)
   }
 
   private def topKCorrelations(topK: Int): Seq[String] = {
@@ -254,6 +336,21 @@ case class ModelInsights
     numericalTable(columns = Seq("Top Contributions", "Contribution Value"), rows)
   }
 
+  private def mapTopKContributions(topK: Int): Map[String, Seq[Map[String, String]]] = {
+    val contribs = for {
+      (feature, derived) <- derivedNonExcludedFeatures
+      contrib = math.abs(derived.contribution.reduceOption[Double](math.max).getOrElse(0.0))
+    } yield (feature, derived, contrib)
+
+    val contribDesc = contribs.sortBy(_._3).reverse
+    val rows = topKInsights(contribDesc, topK)
+    if (rows.isEmpty) {
+      null
+    } else {
+      Table(Seq("Top Contributor", "Contribution Value"), rows, "Top Contributions").asMap
+    }
+  }
+
   private def topKCramersV(topK: Int): Option[String] = {
     val cramersV = for {
       (feature, derived) <- derivedNonExcludedFeatures
@@ -263,6 +360,21 @@ case class ModelInsights
 
     val topCramersV = cramersV.distinct.sortBy(_._2).reverse.take(topK)
     numericalTable(columns = Seq("Top CramersV", "CramersV"), rows = topCramersV)
+  }
+
+  private def mapTopKCramersV(topK: Int): Map[String, Seq[Map[String, String]]] = {
+    val cramersV = for {
+      (feature, derived) <- derivedNonExcludedFeatures
+      group <- derived.derivedFeatureGroup
+      cramersV <- derived.cramersV
+    } yield group -> cramersV
+
+    val topCramersV = cramersV.distinct.sortBy(_._2).reverse.take(topK)
+    if (topCramersV.isEmpty) {
+      Map[String, Seq[Map[String, String]]]("TopCramersV" -> (Map[String, String]("Status" -> "Not Applicable")::Nil))
+    } else {
+      Table(Seq("Top CramersV", "CramersV"), topCramersV, "TopCramersV").asMap
+    }
   }
 
   private def derivedNonExcludedFeatures: Seq[(FeatureInsights, Insights)] = {

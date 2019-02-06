@@ -26,6 +26,7 @@ import org.apache.spark.ml.util.{DefaultParamsReader, DefaultParamsWriter}
 import org.json4s.JsonDSL._
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
+import com.salesforce.op.stages.OpPipelineStageWriter
 
 /**
  * Direct wrappers for ml private [[DefaultParamsWriter]] and [[DefaultParamsReader]]
@@ -72,7 +73,7 @@ case object SparkDefaultParamsReadWrite {
 
   /**
    * Parse metadata JSON string produced by [[DefaultParamsWriter.getMetadataToSave()]].
-   * This is a helper function for [[loadMetadata()]].
+   * This is a helper function for loadMetadata()
    *
    * @param metadataStr  JSON string of metadata
    * @param expectedClassName  If non empty, this is checked against the loaded metadata.
@@ -87,6 +88,5 @@ case object SparkDefaultParamsReadWrite {
    * TODO: Move to [[Metadata]] method
    */
   def getAndSetParams(stage: OpPipelineStageBase, metadata: Metadata): Unit =
-    DefaultParamsReader.getAndSetParams(stage, metadata)
-
+    metadata.getAndSetParams(stage)
 }

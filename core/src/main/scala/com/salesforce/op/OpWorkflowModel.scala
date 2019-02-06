@@ -209,6 +209,14 @@ class OpWorkflowModel(val uid: String = UID[OpWorkflowModel], val trainingParams
     topK: Int = 15
   ): String = insights.prettyPrint(topK)
 
+  def summaryJsonPretty(
+     insights: ModelInsights = modelInsights(
+       resultFeatures.find(f => f.isResponse && !f.isRaw).getOrElse(
+         throw new IllegalArgumentException("No response feature is defined to compute model insights"))
+     ),
+     topK: Int = 10
+   ): String = insights.jsonPrettyPrint(topK)
+
   /**
    * Save this model to a path
    *

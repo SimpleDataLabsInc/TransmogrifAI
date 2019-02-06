@@ -55,6 +55,7 @@ case object CSVSchemaUtils {
   ): StructType = {
     val opts = new org.apache.spark.sql.execution.datasources.csv.CSVOptions(
       parameters = options.copy(header = false).toSparkCSVOptionsMap + ("inferSchema" -> true.toString),
+      columnPruning = false,
       defaultTimeZoneId = "GMT"
     )
     CSVInferSchema.infer(rdd, header.toArray, opts)
