@@ -145,6 +145,13 @@ class Table private(columns: Seq[String], rows: Seq[Seq[String]], name: String) 
 
   override def toString: String = prettyString()
 
+  def asMap : Map[String, Seq[Map[String, String]]] = {
+    val key   : String = name
+    val value : Seq[Map[String, String]] = rows.map(row => (columns zip row).toMap)
+    Map[String, Seq[Map[String, String]]]((key, value))
+  }
+
+
 }
 
 sealed trait Alignment extends EnumEntry

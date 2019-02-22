@@ -92,7 +92,7 @@ class OpWorkflowModel(val uid: String = UID[OpWorkflowModel], val trainingParams
   protected def generateRawData()(implicit spark: SparkSession): DataFrame = {
     require(reader.nonEmpty, "Data reader must be set")
     checkReadersAndFeatures()
-    reader.get.generateDataFrame(rawFeatures, parameters).persist() // don't want to redo this
+    reader.get.generateDataFrame(rawFeatures ++ getBlacklist(), parameters).persist() // don't want to redo this
   }
 
   /**
@@ -208,6 +208,14 @@ class OpWorkflowModel(val uid: String = UID[OpWorkflowModel], val trainingParams
     ),
     topK: Int = 15
   ): String = insights.prettyPrint(topK)
+
+  def summaryJsonPretty(
+     insights: ModelInsights = modelInsights(
+       resultFeatures.find(f => f.isResponse && !f.isRaw).getOrElse(
+         throw new IllegalArgumentException("No response feature is defined to compute model insights"))
+     ),
+     topK: Int = 10
+   ): String = insights.jsonPrettyPrint(topK)
 
   /**
    * Save this model to a path
