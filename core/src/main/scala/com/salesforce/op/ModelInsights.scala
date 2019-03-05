@@ -719,7 +719,7 @@ case object ModelInsights {
       })
     }
 
-    val allInsights = featureInsights ++ blacklistInsights ++ blacklistMapInsights
+    val allInsights = featureInsights// ++ blacklistInsights ++ blacklistMapInsights
     val allFeatures = rawFeatures ++ blacklistedFeatures
 
     allInsights
